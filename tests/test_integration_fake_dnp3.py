@@ -19,7 +19,7 @@ from interoperability.discovery.device_formats import dnp3_device_transforms, dn
 from interoperability.discovery.dnp3 import discover_indexes, discover_profile, dnp3_registry_rows, fake_registry_rows
 from interoperability.mapping_engine import UAITree
 from interoperability.discovery.point_maps import ieee2030_5_point_map
-from interoperability.transform_parser import TransformParser
+from icm.transforms.parser import TransformParser
 from interoperability.transform_registry import TransformRegistry
 
 CASE = Path(__file__).parent / 'integration' / 'fake_dnp3'
@@ -163,7 +163,7 @@ def test_device_read_as_1815_2_inputs_and_beyond(service, mode):
 
 def test_device_used_as_openfmb_ess_reading_profile(service, mode, config):
     """The OpenFMB alias: the system meter (AI 536-556) reaches an ESSReadingProfile through 61850's DECP.MMXU."""
-    from interoperability.models.openfmb import PROFILES
+    from icm.models.openfmb import PROFILES
     alias = next(m for m in config['mappings'] if m['resource']['data_format'] == 'openfmb.ess.reading')
     resource, fmt, path, retention, pipeline = resolve(service, alias['uai'])
     assert path == ['fake_dnp3_der', '1815.2.inputs', '61850', 'openfmb.ess', 'openfmb.ess.reading']
@@ -177,7 +177,7 @@ def test_device_used_as_openfmb_ess_reading_profile(service, mode, config):
     assert result['ess']['conductingEquipment'] == {'mRID': alias['resource']['parameters']['mrid'], 'namedObject': {'name': 'DER 1'}}
     PROFILES['ESSReadingProfile'].model_validate(result)
     pytest.importorskip('google.protobuf')
-    from interoperability.codecs import openfmb as codec
+    from icm.resources.codecs import openfmb as codec
     decoded = codec.decode('essmodule.ESSReadingProfile', codec.encode('essmodule.ESSReadingProfile', result))
     assert decoded['essReading']['readingMMXU']['W']['net']['cVal']['mag'] == 12500.0
 
@@ -205,9 +205,9 @@ def test_writes_reach_the_device_as_ordered_flat_batches(service, mode):
     assert batch['AO_244'] == 1 and batch['AO_245'] == 2 and batch['AO_246'] == 2 and batch['AO_249'] == 95
     assert batch['AO_250'] == (440.0 if mode == 'transform' else 44)               # var point multiplier 0.1
     # The 61850 route to the device also carries its schedule entries as further batches.
-    sched = {'FSCH': {'SchdEntr': [{'StrTm': 5, 'DWMX': {'LimW': 50}}]}, 'DFPF': {'PFGnTgt': 0.9}}
+    sched = {'FSCH': {'x-SchdEntr': [{'StrTm': 5, 'DWMX': {'WMaxSpt': 50}}]}, 'DFPF': {'PFGnTgtSpt': 0.9}}
     via_61850 = TransformParser().build_transform_from_schema(registry.lookup('61850', 'fake_dnp3_der')).execute(sched)
-    assert 'AO_87' not in via_61850                                                     # LimW inside the schedule, not immediate
+    assert 'AO_87' not in via_61850                                                     # WMaxSpt inside the schedule, not immediate
     assert via_61850['AO_210'] == (900.0 if mode == 'transform' else 0.9) or via_61850.get('AO_210') is not None
 
 
